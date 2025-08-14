@@ -119,7 +119,7 @@ const fetchRandomBooks = async (limit = 5, excludeKeys = []) => {
         COUNT(r.id) as review_count
       FROM reviewed_books rb
       LEFT JOIN reviews r ON rb.book_key = r.book_id
-      ${excludeKeys.length > 0 ? 'WHERE rb.book_key NOT IN (SELECT unnest($1::text[]))' : ''}
+      ${excludeKeys.length > 0 ? 'WHERE rb.book_key NOT IN ($1)' : ''}
       GROUP BY rb.book_key
       ORDER BY random()
       LIMIT $${excludeKeys.length > 0 ? 2 : 1}
@@ -144,7 +144,7 @@ const fetchRandomBooks = async (limit = 5, excludeKeys = []) => {
           COUNT(r.id) as review_count
         FROM custom_books cb
         LEFT JOIN reviews r ON cb.book_key = r.book_id
-        ${excludeKeys.length > 0 ? 'WHERE cb.book_key NOT IN (SELECT unnest($1::text[]))' : ''}
+        ${excludeKeys.length > 0 ? 'WHERE cb.book_key NOT IN ($1)' : ''}
         GROUP BY cb.id
         ORDER BY random()
         LIMIT $${excludeKeys.length > 0 ? 2 : 1}
@@ -193,19 +193,15 @@ const processBookData = (book) => ({
 
 // Metrics endpoint
 export const getDashboardMetrics = async (req, res) => {
-  const userId = req.user?.id;
+  const userId = req.user.id;
   
-  if (!userId) {
-    return res.status(400).json({ message: "User ID is required" });
-  }
-
   try {
     const metricsQuery = `
       SELECT 
         COUNT(*) as total_reviews,
         AVG(NULLIF(rating, 0)) as avg_rating
       FROM reviews
-      WHERE user_id = $1::integer
+      WHERE user_id = $1
     `;
     const metricsResult = await query(metricsQuery, [userId]);
     const metrics = metricsResult.rows[0];
@@ -230,20 +226,17 @@ export const getDashboardMetrics = async (req, res) => {
 
 // Books endpoint
 export const getDashboardBooks = async (req, res) => {
-  const userId = req.user?.id;
+  const userId = req.user.id;
   const limit = 5;
   const minNewBooks = 4;
+  const refreshKey = req.query.r;
   
-  if (!userId) {
-    return res.status(400).json({ message: "User ID is required" });
-  }
-
   try {
-    // Get user's favorite genres with type-safe query
+    // Get user's favorite genres
     const userQuery = `
       SELECT favorite_genres 
       FROM users 
-      WHERE id = $1::integer
+      WHERE id = $1
     `;
     const userResult = await query(userQuery, [userId]);
     const favoriteGenres = userResult.rows[0]?.favorite_genres || [];
@@ -256,7 +249,7 @@ export const getDashboardBooks = async (req, res) => {
     let usedFallback = false;
     
     if (favoriteGenres.length > 0) {
-      // Try reviewed books matching genres with proper array handling
+      // Try reviewed books matching genres
       const reviewedBooksQuery = `
         SELECT 
           rb.*,
@@ -264,8 +257,8 @@ export const getDashboardBooks = async (req, res) => {
           COUNT(r.id) as review_count
         FROM reviewed_books rb
         LEFT JOIN reviews r ON rb.book_key = r.book_id
-        WHERE rb.genre && $1::text[]
-          ${excludeKeys.length > 0 ? 'AND rb.book_key NOT IN (SELECT unnest($2::text[]))' : ''}
+        WHERE rb.genre && $1
+          ${excludeKeys.length > 0 ? 'AND rb.book_key NOT IN ($2)' : ''}
         GROUP BY rb.book_key
         ORDER BY random()
         LIMIT ${limit * 2}
@@ -284,12 +277,12 @@ export const getDashboardBooks = async (req, res) => {
           COUNT(r.id) as review_count
         FROM custom_books cb
         LEFT JOIN reviews r ON cb.book_key = r.book_id
-        WHERE cb.genre && $1::text[]
+        WHERE cb.genre && $1
           AND NOT EXISTS (
             SELECT 1 FROM reviewed_books rb 
             WHERE rb.book_key = cb.book_key
           )
-          ${excludeKeys.length > 0 ? 'AND cb.book_key NOT IN (SELECT unnest($2::text[]))' : ''}
+          ${excludeKeys.length > 0 ? 'AND cb.book_key NOT IN ($2)' : ''}
         GROUP BY cb.id
         ORDER BY random()
         LIMIT ${limit * 2}
@@ -379,24 +372,29 @@ export const getDashboardBooks = async (req, res) => {
   }
 };
 
-// Combined dashboard endpoint
+// Keep the original endpoint for backward compatibility
 export const getDashboardData = async (req, res) => {
   try {
     // Get metrics
-    const metrics = await getDashboardMetrics(req, res);
+    const metricsRes = await getDashboardMetrics(req, {
+      json: (data) => data
+    });
+    
     // Get books
-    const books = await getDashboardBooks(req, res);
+    const booksRes = await getDashboardBooks(req, {
+      json: (data) => data
+    });
     
     // Combine responses
     res.status(200).json({
       metrics: {
-        total_reviews: metrics.total_reviews,
-        avg_rating: metrics.avg_rating
+        total_reviews: metricsRes.total_reviews,
+        avg_rating: metricsRes.avg_rating
       },
-      featured_book: books.featured_book,
-      recommended_books: books.recommended_books,
-      favorite_genres: req.user?.favorite_genres || [],
-      used_fallback: books.used_fallback
+      featured_book: booksRes.featured_book,
+      recommended_books: booksRes.recommended_books,
+      favorite_genres: req.user.favorite_genres || [],
+      used_fallback: booksRes.used_fallback
     });
     
   } catch (err) {
@@ -407,3 +405,4 @@ export const getDashboardData = async (req, res) => {
     });
   }
 };
+
