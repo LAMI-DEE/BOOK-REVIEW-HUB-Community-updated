@@ -15,7 +15,10 @@ const server = http.createServer(app);
 //create socket server and attach to http server
 const io = new Server(server, {
     cors: {
-        origin: 'http://localhost:5173',//Frontend URL
+        origin: [
+            'http://localhost:5173',
+            /\.vercel\.app$/  // Allow Vercel deployments
+        ],//Frontend URL
         credentials: true
     }
 });

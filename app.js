@@ -20,7 +20,10 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-    origin:'http://localhost:5173', // Adjust this to your frontend URL
+    origin: [
+            'http://localhost:5173',
+            /\.vercel\.app$/  // Allow Vercel deployments
+        ],//Frontend URL
     credentials: true // Allow cookies to be sent
 }));
 
