@@ -2,7 +2,8 @@ import { query } from "../db/db.js";
 import { uploadBookCover } from "./uploadController.js";
 
 export const addCustomBook = async (req, res) => {
-    const {book_key, title, author, genre, description, cover_img:cover_img_input} = req.body;
+    const bodyData = req.file ? req.body : JSON.parse(JSON.stringify(req.body));
+    const {book_key, title, author, genre, description, cover_img:cover_img_input} = bodyData;
     const userId = req.user.id;
 
     let cover_img = null;
