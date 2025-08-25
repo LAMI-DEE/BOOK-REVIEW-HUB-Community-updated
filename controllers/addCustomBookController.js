@@ -1,9 +1,8 @@
 import { query } from "../db/db.js";
-import { uploadBookCover } from "./uploadController.js";
 
 export const addCustomBook = async (req, res) => {
     try {
-        // Get text fields from req.body (already parsed by express)
+        // Get text fields from req.body
         const { 
             book_key, 
             title, 
@@ -17,10 +16,10 @@ export const addCustomBook = async (req, res) => {
 
         let cover_img = null;
         
-        // Handle file upload
+        // Handle file upload - Cloudinary already processed the file
         if (req.file) {
-            const uploadedUrl = await uploadBookCover(req.file.path);
-            cover_img = uploadedUrl;
+            // CloudinaryStorage already uploaded the file, use the provided URL
+            cover_img = req.file.path;
         } 
         // Handle URL if no file was uploaded
         else if (cover_img_input) {
